@@ -45,7 +45,7 @@ public class NIWSCommand extends HystrixObservableCommand<HttpClientResponse<Byt
     }
 
     @Override
-    protected Observable<HttpClientResponse<ByteBuf>> run() {
+    protected Observable<HttpClientResponse<ByteBuf>> construct() {
         return httpClient.submit(req);
     }
 }

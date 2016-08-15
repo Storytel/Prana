@@ -65,18 +65,17 @@ final class UnicastDisposableCachingSubject<T extends ReferenceCounted> extends 
     }
 
     private void _dispose(Action1<T> disposedElementsProcessor) {
-        Subscriber<T> noOpSub = new PassThruObserver<>(Subscribers.create(disposedElementsProcessor,
-                new Action1<Throwable>() {
-                    @Override
-                    public void call(Throwable throwable) {
-
-                    }
-                }),
+        Subscriber<T> noOpSub = new PassThruObserver<>(Subscribers.create(disposedElementsProcessor, throwable -> {}),
                 state); // Any buffering post buffer draining must not be lying in the buffer
         state.buffer.sendAllNotifications(noOpSub); // It is important to empty the buffer before setting the observer.
         // If not done, there can be two threads draining the buffer
         // (PassThroughObserver on any notification) and this thread.
         state.setObserverRef(noOpSub); // All future notifications are not sent anywhere.
+    }
+
+    @Override
+    public boolean hasObservers() {
+        return state.casState(State.STATES.SUBSCRIBED, State.STATES.SUBSCRIBED);
     }
 
     /**

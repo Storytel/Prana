@@ -28,8 +28,6 @@ import io.reactivex.netty.protocol.http.client.HttpClient;
 import io.reactivex.netty.protocol.http.client.HttpClientRequest;
 import io.reactivex.netty.protocol.http.client.HttpClientResponse;
 import rx.Observable;
-import rx.exceptions.OnErrorThrowable;
-import rx.functions.Func1;
 
 import javax.inject.Inject;
 import java.net.MalformedURLException;
@@ -59,22 +57,16 @@ public class HealthCheckHandler extends AbstractRequestHandler {
         if (Strings.isNullOrEmpty(externalHealthCheckURL)) {
             return context.sendSimple(DEFAULT_OK_HEALTH);
         } else {
-            return getResponse(externalHealthCheckURL).flatMap(new Func1<HttpClientResponse<ByteBuf>, Observable<Void>>() {
-                @Override
-                public Observable<Void> call(HttpClientResponse<ByteBuf> response) {
-                    if (response.getStatus().code() == HttpResponseStatus.OK.code()) {
-                        context.sendSimple(DEFAULT_OK_HEALTH);
-                    } else {
-                        context.sendError(HttpResponseStatus.SERVICE_UNAVAILABLE, DEFAULT_FAIL_HEALTH);
-                    }
-                    return DEFAULT_NOOP_RESPONSE;
-                }
-            }).onErrorFlatMap(new Func1<OnErrorThrowable, Observable<Void>>() {
-                @Override
-                public Observable<Void> call(OnErrorThrowable onErrorThrowable) {
+            return getResponse(externalHealthCheckURL).flatMap(response -> {
+                if (response.getStatus().code() == HttpResponseStatus.OK.code()) {
+                    context.sendSimple(DEFAULT_OK_HEALTH);
+                } else {
                     context.sendError(HttpResponseStatus.SERVICE_UNAVAILABLE, DEFAULT_FAIL_HEALTH);
-                    return DEFAULT_NOOP_RESPONSE;
                 }
+                return DEFAULT_NOOP_RESPONSE;
+            }).onErrorResumeNext((throwable) -> {
+                context.sendError(HttpResponseStatus.SERVICE_UNAVAILABLE, DEFAULT_FAIL_HEALTH);
+                return DEFAULT_NOOP_RESPONSE;
             });
         }
     }
@@ -93,7 +85,7 @@ public class HealthCheckHandler extends AbstractRequestHandler {
         }
         Integer timeout = DynamicProperty.getInstance("prana.host.healthcheck.timeout").getInteger(DEFAULT_CONNECTION_TIMEOUT);
         HttpClient<ByteBuf, ByteBuf> httpClient = RxNetty.<ByteBuf, ByteBuf>newHttpClientBuilder(host, port)
-                .pipelineConfigurator(PipelineConfigurators.<ByteBuf, ByteBuf>httpClientConfigurator())
+                .pipelineConfigurator(PipelineConfigurators.httpClientConfigurator())
                 .channelOption(ChannelOption.CONNECT_TIMEOUT_MILLIS, timeout)
                 .build();
         return httpClient.submit(HttpClientRequest.createGet(path));
